@@ -18,7 +18,6 @@
     NSString *apiKey;
     NSString *sessionId;
     NSMutableDictionary *observersDictionary;
-    Boolean statusBarPlugin;
 }
 
 @synthesize exceptionId;
@@ -30,7 +29,6 @@
     [self.webView setOpaque:false];
     [self.webView setBackgroundColor:UIColor.clearColor];
 
-    statusBarPlugin = true;
     callbackList = [[NSMutableDictionary alloc] init];
 }
 - (void)addEvent:(CDVInvokedUrlCommand*)command{
@@ -56,10 +54,10 @@
 
     NSMutableDictionary *payload = [[NSMutableDictionary alloc]init];
     [payload setObject:@"iOS" forKey:@"platform"];
-    [payload setObject:@"3.3.0" forKey:@"cp_version"];
+    [payload setObject:@"3.4.3" forKey:@"cp_version"];
     NSMutableDictionary *logData = [[NSMutableDictionary alloc]init];
     [logData setObject:apiKey forKey:@"partner_id"];
-    [logData setObject:@"2.14.0" forKey:@"build"];
+    [logData setObject:@"2.15.3" forKey:@"build"];
     [logData setObject:@"https://github.com/opentok/cordova-plugin-opentok" forKey:@"source"];
     [logData setObject:@"info" forKey:@"payload_type"];
     [logData setObject:payload forKey:@"payload"];
@@ -122,25 +120,25 @@
 
     // Get Parameters
     NSString* name = [command.arguments objectAtIndex:0];
-    CGFloat top = [[command.arguments objectAtIndex:1] floatValue];
-    CGFloat left = [[command.arguments objectAtIndex:2] floatValue];
-    CGFloat width = [[command.arguments objectAtIndex:3] floatValue];
-    CGFloat height = [[command.arguments objectAtIndex:4] floatValue];
+    int top = [[command.arguments objectAtIndex:1] intValue];
+    int left = [[command.arguments objectAtIndex:2] intValue];
+    int width = [[command.arguments objectAtIndex:3] intValue];
+    int height = [[command.arguments objectAtIndex:4] intValue];
     int zIndex = [[command.arguments objectAtIndex:5] intValue];
     int audioBitrate = [[command.arguments objectAtIndex:12] intValue];
-    int cameraFrameRate = [[command.arguments objectAtIndex: 16] intValue];
+    int cameraFrameRate = [[command.arguments objectAtIndex: 15] intValue];
     NSString* publishAudio = [command.arguments objectAtIndex:6];
     NSString* publishVideo = [command.arguments objectAtIndex:7];
     NSString* cameraPosition = [command.arguments objectAtIndex:8];
-    NSString* audioFallbackEnabled = [command.arguments objectAtIndex: 12];
-    NSString* audioTrack = [command.arguments objectAtIndex: 14];
-    NSString* videoTrack = [command.arguments objectAtIndex: 15];
-    NSString* cameraResolution = [command.arguments objectAtIndex: 17];
+    NSString* audioFallbackEnabled = [command.arguments objectAtIndex: 11];
+    NSString* audioTrack = [command.arguments objectAtIndex: 13];
+    NSString* videoTrack = [command.arguments objectAtIndex: 14];
+    NSString* cameraResolution = [command.arguments objectAtIndex: 16];
 
     // Sanitize publisher properties
     if ([cameraResolution isEqualToString:@"1280x720"]) {
       finalCameraResolution = OTCameraCaptureResolutionHigh;
-    }else if ([cameraResolution isEqualToString:@"320x240"]) {
+    }else if ([cameraResolution isEqualToString:@"320x240"] || [cameraResolution isEqualToString:@"352x288"]) {
       finalCameraResolution = OTCameraCaptureResolutionLow;
     } else {
       finalCameraResolution = OTCameraCaptureResolutionMedium;
@@ -170,39 +168,13 @@
 
     // Publish and set View
     _publisher = [[OTPublisher alloc] initWithDelegate:self settings:_publisherSettings];
+    _publisher.networkStatsDelegate = self;
+    _publisher.audioLevelDelegate = self;
     [_publisher setPublishAudio:bpubAudio];
     [_publisher setPublishVideo:bpubVideo];
     [_publisher setAudioFallbackEnabled:baudioFallbackEnabled];
-    [self.webView.superview addSubview:_publisher.view];
-
-    [self setPosition: @"TBPublisher" top: top left: left width: width height: height];
-
-    NSString* strRadius = [command.arguments objectAtIndex:11];
-    NSArray* strArray = [strRadius componentsSeparatedByString:@" "];
-
-    CGFloat topLeftX = [strArray[0] floatValue];
-    CGFloat topLeftY = [strArray[1] floatValue];
-    CGFloat topRightX = [strArray[2] floatValue];
-    CGFloat topRightY = [strArray[3] floatValue];
-    CGFloat bottomRightX = [strArray[4] floatValue];
-    CGFloat bottomRightY = [strArray[5] floatValue];
-    CGFloat bottomLeftX = [strArray[6] floatValue];
-    CGFloat bottomLeftY = [strArray[7] floatValue];
-
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGPathAddRect(path, NULL, CGRectMake(topLeftX, 0, width - topLeftX - topRightX, height / 2));
-    CGPathAddRect(path, NULL, CGRectMake(bottomLeftX, height / 2, width - bottomLeftX - bottomRightX, height));
-    CGPathAddRect(path, NULL, CGRectMake(0, topLeftY, width / 2, height - topLeftY - bottomLeftY));
-    CGPathAddRect(path, NULL, CGRectMake(width / 2, topRightY, width, height - topRightY - bottomRightY));
-
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, 0, topLeftX * 2, topLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (topRightX * 2), 0, topRightX * 2, topRightY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, height - (bottomLeftY * 2) , bottomLeftX * 2,     bottomLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (bottomRightX * 2), height - (bottomRightY * 2), bottomRightX * 2, bottomRightY * 2));
-
-    CAShapeLayer *maskLayer = [[CAShapeLayer alloc] init];
-    maskLayer.path = path;
-    _publisher.view.layer.mask = maskLayer;
+    [self.webView.scrollView addSubview:_publisher.view];
+    [_publisher.view setFrame:CGRectMake(left, top, width, height)];
 
     // Set depth location of camera view based on CSS z-index.
     _publisher.view.layer.zPosition = zIndex;
@@ -219,60 +191,22 @@
 - (void)updateView:(CDVInvokedUrlCommand*)command{
     NSString* callback = command.callbackId;
     NSString* sid = [command.arguments objectAtIndex:0];
-    CGFloat top = [[command.arguments objectAtIndex:1] floatValue];
-    CGFloat left = [[command.arguments objectAtIndex:2] floatValue];
-    CGFloat width = [[command.arguments objectAtIndex:3] floatValue];
-    CGFloat height = [[command.arguments objectAtIndex:4] floatValue];
+    int top = [[command.arguments objectAtIndex:1] intValue];
+    int left = [[command.arguments objectAtIndex:2] intValue];
+    int width = [[command.arguments objectAtIndex:3] intValue];
+    int height = [[command.arguments objectAtIndex:4] intValue];
     int zIndex = [[command.arguments objectAtIndex:5] intValue];
-
-    NSString* strRadius = [command.arguments objectAtIndex:8];
-    NSArray* strArray = [strRadius componentsSeparatedByString:@" "];
-
-    CGFloat topLeftX = [strArray[0] floatValue];
-    CGFloat topLeftY = [strArray[1] floatValue];
-    CGFloat topRightX = [strArray[2] floatValue];
-    CGFloat topRightY = [strArray[3] floatValue];
-    CGFloat bottomRightX = [strArray[4] floatValue];
-    CGFloat bottomRightY = [strArray[5] floatValue];
-    CGFloat bottomLeftX = [strArray[6] floatValue];
-    CGFloat bottomLeftY = [strArray[7] floatValue];
-
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGPathAddRect(path, NULL, CGRectMake(topLeftX, 0, width - topLeftX - topRightX, height / 2));
-    CGPathAddRect(path, NULL, CGRectMake(bottomLeftX, height / 2, width - bottomLeftX - bottomRightX, height));
-    CGPathAddRect(path, NULL, CGRectMake(0, topLeftY, width / 2, height - topLeftY - bottomLeftY));
-    CGPathAddRect(path, NULL, CGRectMake(width / 2, topRightY, width, height - topRightY - bottomRightY));
-
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, 0, topLeftX * 2, topLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (topRightX * 2), 0, topRightX * 2, topRightY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, height - (bottomLeftY * 2) , bottomLeftX * 2,     bottomLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (bottomRightX * 2), height - (bottomRightY * 2), bottomRightX * 2, bottomRightY * 2));
-
-    CAShapeLayer *maskLayer = [[CAShapeLayer alloc] init];
-    maskLayer.path = path;
-
     if ([sid isEqualToString:@"TBPublisher"]) {
         NSLog(@"The Width is: %d", width);
-        // Reposition the video feeds!
-        [self setPosition: sid top: top left: left width: width height: height];
-
-        _publisher.view.layer.mask = maskLayer;
-
-        _publisher.view.layer.mask = maskLayer;
+        _publisher.view.frame = CGRectMake(left, top, width, height);
 
         // Set depth location of camera view based on CSS z-index.
         _publisher.view.layer.zPosition = zIndex;
 
-        // Ensure that we can click through view when it's behind WebView
-        _publisher.view.userInteractionEnabled = YES;
-        if(zIndex < 0) {
-            _publisher.view.userInteractionEnabled = NO;
-        }
-
         // If the zIndex is 0(default) bring the view to the top, last one wins.
         // See: https://github.com/saghul/cordova-plugin-iosrtc/blob/5b6a180b324c8c9bac533fa481a457b74183c740/src/PluginMediaStreamRenderer.swift#L191
         if(zIndex == 0) {
-            [self.webView.superview bringSubviewToFront:_publisher.view];
+            [self.webView.scrollView bringSubviewToFront:_publisher.view];
         }
     }
 
@@ -281,25 +215,15 @@
 
     if (streamInfo) {
         // Reposition the video feeds!
-        [self setPosition: sid top: top left: left width: width height: height];
-
-        streamInfo.view.layer.mask = maskLayer;
-
-        streamInfo.view.layer.mask = maskLayer;
+        streamInfo.view.frame = CGRectMake(left, top, width, height);
 
         // Set depth location of camera view based on CSS z-index.
         streamInfo.view.layer.zPosition = zIndex;
 
-        // Ensure that we can click through view when it's behind WebView
-        streamInfo.view.userInteractionEnabled = YES;
-        if(zIndex < 0) {
-            streamInfo.view.userInteractionEnabled = NO;
-        }
-
         // If the zIndex is 0(default) bring the view to the top, last one wins.
         // See: https://github.com/saghul/cordova-plugin-iosrtc/blob/5b6a180b324c8c9bac533fa481a457b74183c740/src/PluginMediaStreamRenderer.swift#L191
         if(zIndex == 0) {
-            [self.webView.superview bringSubviewToFront:_publisher.view];
+            [self.webView.scrollView bringSubviewToFront:_publisher.view];
         }
     }
 
@@ -308,35 +232,15 @@
     //[self.commandDelegate sendPluginResult:callbackResult toSuccessCallbackString:command.callbackId];
     [self.commandDelegate sendPluginResult:callbackResult callbackId:command.callbackId];
 }
-- (void)hasStatusBarPlugin:(CDVInvokedUrlCommand*)command{
-    statusBarPlugin = [[command.arguments objectAtIndex:0] boolValue];
-}
-- (void)updateCamera:(CDVInvokedUrlCommand*)command{
-    NSString* sid = [command.arguments objectAtIndex:0];
-    CGFloat top = [[command.arguments objectAtIndex:1] floatValue];
-    CGFloat left = [[command.arguments objectAtIndex:2] floatValue];
-    CGFloat width = [[command.arguments objectAtIndex:3] floatValue];
-    CGFloat height = [[command.arguments objectAtIndex:4] floatValue];
 
-    [self setPosition: sid top: top left: left width: width height: height];
+// Helper function to get the base64 image of a view
+- (NSString*)getBase64PNGFromUIView:(UIView *)view {
+    UIImage *screenshot = [view captureViewImage];
+    NSData *imageData = UIImageJPEGRepresentation(screenshot, 1);
+    NSString *encodedString = [imageData base64EncodedStringWithOptions:0 ];
+    return [NSString stringWithFormat:@"data:image/png;base64,%@",encodedString];
 }
-- (void)setPosition:(NSString*)sid top:(CGFloat)top left:(CGFloat)left width:(CGFloat)width height:(CGFloat)height {
-    int offsetTop = 20;
-    if (statusBarPlugin) {
-        // We set the offsetTop to the top position of the webView because the StatusBarPlugin changes the top position to the proper offset.
-        offsetTop = self.webView.frame.origin.y;
-    } else if ([UIApplication sharedApplication].isStatusBarHidden) {
-        offsetTop = 0;
-    }
-
-    CGRect frame = CGRectMake(left, top + offsetTop, width, height);
-    if ([sid isEqualToString:@"TBPublisher"]) {
-        _publisher.view.frame = frame;
-    } else {
-        OTSubscriber* streamInfo = [subscriberDictionary objectForKey:sid];
-        streamInfo.view.frame = frame;
-    }
-}
+    
 
 #pragma mark Publisher Methods
 - (void)publishAudio:(CDVInvokedUrlCommand*)command{
@@ -381,6 +285,27 @@
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
+- (void)getImgData:(CDVInvokedUrlCommand*)command{
+    NSString* sid = [command.arguments objectAtIndex:0];
+    NSString *snapshot;
+    OTSubscriber * subscriber;
+    
+    if ([sid isEqualToString:@"TBPublisher"]) {
+        if (_publisher.view) {
+            snapshot = [self getBase64PNGFromUIView: _publisher.view];
+        }
+    } else {
+        subscriber = [subscriberDictionary objectForKey:sid];
+        if (subscriber) {
+            snapshot = [self getBase64PNGFromUIView: subscriber.view];
+        }
+    }
+    
+    CDVPluginResult* callbackResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                                                        messageAsString: snapshot];
+    [callbackResult setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:callbackResult callbackId:command.callbackId];
+}
 
 #pragma mark Subscriber Methods
 - (void)subscribeToAudio:(CDVInvokedUrlCommand*)command{
@@ -417,8 +342,21 @@
     NSLog(@"iOS Connecting to Session");
 
     // Get Parameters
+    OTError *error = nil;
     NSString* tbToken = [command.arguments objectAtIndex:0];
-    [_session connectWithToken:tbToken error:nil];
+    [_session connectWithToken:tbToken error:&error];
+    CDVPluginResult* pluginResult;
+    if (error) {
+        NSNumber* code = [NSNumber numberWithInt:[error code]];
+        NSMutableDictionary* err = [[NSMutableDictionary alloc] init];
+        [err setObject:error.localizedDescription forKey:@"message"];
+        [err setObject:code forKey:@"code"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:err];
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    }
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+
 }
 
 // Called by session.disconnect()
@@ -454,15 +392,17 @@
     NSString* sid = [command.arguments objectAtIndex:0];
 
 
-    CGFloat top = [[command.arguments objectAtIndex:1] floatValue];
-    CGFloat left = [[command.arguments objectAtIndex:2] floatValue];
-    CGFloat width = [[command.arguments objectAtIndex:3] floatValue];
-    CGFloat height = [[command.arguments objectAtIndex:4] floatValue];
+    int top = [[command.arguments objectAtIndex:1] intValue];
+    int left = [[command.arguments objectAtIndex:2] intValue];
+    int width = [[command.arguments objectAtIndex:3] intValue];
+    int height = [[command.arguments objectAtIndex:4] intValue];
     int zIndex = [[command.arguments objectAtIndex:5] intValue];
 
     // Acquire Stream, then create a subscriber object and put it into dictionary
     OTStream* myStream = [streamDictionary objectForKey:sid];
     OTSubscriber* sub = [[OTSubscriber alloc] initWithStream:myStream delegate:self];
+    sub.audioLevelDelegate = self;
+    sub.networkStatsDelegate = self;
     [_session subscribe:sub error:nil];
 
     if ([[command.arguments objectAtIndex:6] isEqualToString:@"false"]) {
@@ -475,39 +415,10 @@
 
     [sub.view setFrame:CGRectMake(left, top, width, height)];
 
-    NSString* strRadius = [command.arguments objectAtIndex:10];
-    NSArray* strArray = [strRadius componentsSeparatedByString:@" "];
-
-    CGFloat topLeftX = [strArray[0] floatValue];
-    CGFloat topLeftY = [strArray[1] floatValue];
-    CGFloat topRightX = [strArray[2] floatValue];
-    CGFloat topRightY = [strArray[3] floatValue];
-    CGFloat bottomRightX = [strArray[4] floatValue];
-    CGFloat bottomRightY = [strArray[5] floatValue];
-    CGFloat bottomLeftX = [strArray[6] floatValue];
-    CGFloat bottomLeftY = [strArray[7] floatValue];
-
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGPathAddRect(path, NULL, CGRectMake(topLeftX, 0, width - topLeftX - topRightX, height / 2));
-    CGPathAddRect(path, NULL, CGRectMake(bottomLeftX, height / 2, width - bottomLeftX - bottomRightX, height));
-    CGPathAddRect(path, NULL, CGRectMake(0, topLeftY, width / 2, height - topLeftY - bottomLeftY));
-    CGPathAddRect(path, NULL, CGRectMake(width / 2, topRightY, width, height - topRightY - bottomRightY));
-
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, 0, topLeftX * 2, topLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (topRightX * 2), 0, topRightX * 2, topRightY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(0, height - (bottomLeftY * 2) , bottomLeftX * 2,     bottomLeftY * 2));
-    CGPathAddEllipseInRect(path, NULL, CGRectMake(width - (bottomRightX * 2), height - (bottomRightY * 2), bottomRightX * 2, bottomRightY * 2));
-
-    CAShapeLayer *maskLayer = [[CAShapeLayer alloc] init];
-    maskLayer.path = path;
-
-    sub.view.layer.mask = maskLayer;
-
-
     // Set depth location of camera view based on CSS z-index.
     sub.view.layer.zPosition = zIndex;
 
-    [self.webView.superview addSubview:sub.view];
+    [self.webView.scrollView addSubview:sub.view];
 
     // Return to JS event handler
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
@@ -768,12 +679,12 @@
 
     NSLog(@"iOS Session Received signal from Connection: %@ with id %@", connection, [connection connectionId]);
     NSMutableDictionary* data = [[NSMutableDictionary alloc] init];
-    [data setObject: type forKey: @"type"];
-    [data setObject: string forKey: @"data"];
+    [data setObject: (type == nil) ? @ "" : type forKey: @"type"];
+    [data setObject: (string == nil) ? @"" : string forKey: @"data"];
     if (connection.connectionId) {
         [data setObject: connection.connectionId forKey: @"connectionId"];
-        [self triggerJSEvent: @"sessionEvents" withType: @"signalReceived" withData: data];
     }
+    [self triggerJSEvent: @"sessionEvents" withType: @"signalReceived" withData: data];
 }
 - (void)session:(OTSession*)session archiveStartedWithId:(nonnull NSString *)archiveId name:(NSString *_Nullable)name{
     NSMutableDictionary* data = [[NSMutableDictionary alloc] init];
